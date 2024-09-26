@@ -35,4 +35,3 @@ public class Game extends JFrame implements ActionListener {
 	//public static void main(String [] args){ new Game();}
 
 }
-
