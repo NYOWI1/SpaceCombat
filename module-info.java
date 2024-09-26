@@ -4,6 +4,6 @@
 /**
  * 
  */
-module Game {
+module Space {
 	requires java.desktop;
 }
