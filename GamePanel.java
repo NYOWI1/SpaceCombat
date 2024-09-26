@@ -26,7 +26,7 @@ public class GamePanel extends JPanel implements Runnable {
 	MouseDetector mouse;
 	GameWindowHandler window;
 
-	JFrame frame = new JFrame("Space Shooter");
+	JFrame frame = new JFrame("Space Combat");
 	volatile boolean play;
 	boolean inited = false;
 	boolean up = false, down = false, right = false, left = false;
@@ -51,17 +51,25 @@ public class GamePanel extends JPanel implements Runnable {
 	int numberOfStationaryEnemies = 3;
 	int numberOfEnemyBullets = 15;
 	int numberOfBullets = 25;
+	int powerup_count = 1;
+	int shield_count = 1;
 	int countEnemy = numberOfEnemies + numberOfStationaryEnemies;
 	double timeForBullet = 0.005;
 	int seconds = 90;
+    private int highScore;  // To store the high score
+    private int currentScore = 0;  // To track current score
+    private int remainingHearts1 = 3;
 	
 	
 	Player player;
 	HealthBar[] hearts;
 	Enemy[] enemy;
+	PowerUp powerup;
+    Shield shield;
 	Bullet[] bullets;
 	Bullet[] enemyBullets;
 	Enemy[] stationaryEnemy;
+	LocalStorage localStorage = new LocalStorage("Resources/data.properties");
 
 	public GamePanel() {
 		setSize(1080, 660);
@@ -72,15 +80,19 @@ public class GamePanel extends JPanel implements Runnable {
 		frame.setLocationRelativeTo(null);
 		setBackground(Color.BLACK);
 		frame.add(this);
-		File background = new File("Assests/background2.jpg");
+		this.highScore = loadHighScore();
+    powerup = new PowerUp();  // Initialize power-up
+    shield = new Shield();  // Initialize shield here
+		File background = new File("Resources/background2.jpg");
 		try {
 			backGround = (ImageIO.read(background))
 					.getSubimage(0, 0, 1080, 660);
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
+		
 
-		File opacityF = new File("Assests/opacity.png");
+		File opacityF = new File("Resources/opacity.png");
 		try {
 			opacity = (ImageIO.read(opacityF)).getSubimage(0, 0, 1080, 660);
 		} catch (IOException e) {
@@ -89,6 +101,57 @@ public class GamePanel extends JPanel implements Runnable {
 		frame.setVisible(true);
 	}
 
+	  private int loadHighScore() {
+	        int score = 0;
+	        try {
+	            File file = new File("Resources/highscore.txt");
+	            if (file.exists()) {
+	                BufferedReader reader = new BufferedReader(new FileReader(file));
+	                score = Integer.parseInt(reader.readLine());
+	                reader.close();
+	            }
+	        } catch (Exception e) {
+	            e.printStackTrace();
+	        }
+	        return score;
+	    }
+
+	    // Method to save high score to file
+	    private void saveHighScore(int newHighScore) {
+	        try {
+	            BufferedWriter writer = new BufferedWriter(new FileWriter("Resources/highscore.txt"));
+	            writer.write(String.valueOf(newHighScore));
+	            writer.close();
+	        } catch (Exception e) {
+	            e.printStackTrace();
+	        }
+	    }
+
+	    // Method to update the player's score and check if they surpassed the high score
+	    public void updateScore(int score) {
+	        currentScore = score;  // Update the current score
+	        if (currentScore > highScore) {
+	            System.out.println("New High Score! Extra Life Gained.");
+	            highScore = currentScore;
+	            saveHighScore(highScore);  // Save the new high score
+	            gainExtraLife();  // Grant extra life
+	        }
+	    }
+
+	    // Method to grant an extra life
+	    private void gainExtraLife() {
+	        remainingHearts++;
+	        System.out.println("Extra life gained! Total Lives: " + remainingHearts);
+	    }
+
+	    // Call this method whenever the player gains points
+	    public void incrementScore() {
+	        currentScore += 10;  // Example increment (change based on your scoring system)
+	        updateScore(currentScore);  // Check and update the score
+	    }
+
+	    
+	
 	public void init() {
 		keys = new KeyDetector(this);
 		mouse = new MouseDetector(this);
@@ -110,6 +173,8 @@ public class GamePanel extends JPanel implements Runnable {
 			hearts[i] = new HealthBar();
 			hearts[i].x = 40 * i;
 		}
+		
+		powerup = new PowerUp();
 
 		enemy = new Enemy[numberOfEnemies];
 		for (int i = 0; i < numberOfEnemies; i++) {
@@ -157,7 +222,16 @@ public class GamePanel extends JPanel implements Runnable {
 				menuPanel.draw(g2d);
 			} else if (!gameOver) {
 				g2d.drawImage(backGround, 0, 0, null); // BackGround
-
+				
+				if (powerup_count == 1) {
+					g2d.drawImage(powerup.getImage(),powerup.x, powerup.y , null);
+					
+				}
+				if (shield_count == 1) {
+					g2d.drawImage(shield.getImage(),shield.x, shield.y , null);
+					
+				}
+				
 				for (int i = 0; i < numberOfHearts; i++)
 					g2d.drawImage(hearts[i].getImage(), hearts[i].x, 620, null);
 
@@ -205,7 +279,7 @@ public class GamePanel extends JPanel implements Runnable {
 				}
 
 			} else if (resultPanel) {
-				result.draw(g2d);
+				result.draw(g2d,currentScore);
 			}
 		}
 
@@ -232,38 +306,66 @@ public class GamePanel extends JPanel implements Runnable {
 	}
 
 	public void addBullet(int x) {
-		if (x == 1) {
-			for (int i = 0; i < numberOfBullets; i++) {
-				if (!bullets[i].fired) {
-					if (i % 2 == 0)
-						bullets[i].x = player.x + 70;
-					else
-						bullets[i].x = player.x + 30;
-					bullets[i].y = player.y + 40;
-					bullets[i].theta = theta;
-					bullets[i].sin = Math.sin(bullets[i].theta - Math.PI / 2);
-					bullets[i].cos = Math.cos(bullets[i].theta - Math.PI / 2);
-					bullets[i].fired = true;
-					break;
-				}
-			}
-		}
+	    // Normal firing pattern
+	    if (x == 1) {
+	        for (int i = 0; i < numberOfBullets; i++) {
+	            if (!bullets[i].fired) {
+	                if (i % 2 == 0)
+	                    bullets[i].x = player.x + 70;
+	                else
+	                    bullets[i].x = player.x + 30;
+	                bullets[i].y = player.y + 40;
+	                bullets[i].theta = theta;
+	                bullets[i].sin = Math.sin(bullets[i].theta - Math.PI / 2);
+	                bullets[i].cos = Math.cos(bullets[i].theta - Math.PI / 2);
+	                bullets[i].fired = true;
+	                break;
+	            }
+	        }
+	    }
 
-		if (x == 2) {
-			for (int i = 0; i < numberOfBullets; i++) {
-				if (!bullets[i].fired) {
-					bullets[i].fired = true;
-					bullets[i].x = player.x + 40;
-					bullets[i].y = player.y + 40;
-					bullets[i].theta = Math.random() * Math.PI * 2;
-					bullets[i].sin = Math.sin(bullets[i].theta - Math.PI / 2);
-					bullets[i].cos = Math.cos(bullets[i].theta - Math.PI / 2);
-					continue;
-				}
-			}
-		}
+	    // Power-up firing pattern (random direction)
+	    if (x == 2) {
+	        for (int i = 0; i < numberOfBullets; i++) {
+	            if (!bullets[i].fired) {
+	                bullets[i].fired = true;
+	                bullets[i].x = player.x + 40;
+	                bullets[i].y = player.y + 40;
+	                bullets[i].theta = Math.random() * Math.PI * 2;
+	                bullets[i].sin = Math.sin(bullets[i].theta - Math.PI / 2);
+	                bullets[i].cos = Math.cos(bullets[i].theta - Math.PI / 2);
+	                continue;
+	            }
+	        }
+	    }
+
+	    // New firing pattern (Burst/Fan-shape firing)
+	    if (x == 3) {
+	        int bulletsInBurst = 5;  // Fire 5 bullets in a spread
+	        double angleSpread = Math.PI / 6; // Spread bullets over 30 degrees (PI/6 radians)
+	        double centerAngle = theta; // Center of the burst is the direction player is facing
+	        
+	        for (int i = 0; i < bulletsInBurst; i++) {
+	            for (int j = 0; j < numberOfBullets; j++) {
+	                if (!bullets[j].fired) {
+	                    bullets[j].fired = true;
+	                    bullets[j].x = player.x + 40;
+	                    bullets[j].y = player.y + 40;
+	                    
+	                    // Calculate angle for each bullet in the burst
+	                    double angleOffset = angleSpread * (i - (bulletsInBurst - 1) / 2.0); 
+	                    bullets[j].theta = centerAngle + angleOffset;
+	                    bullets[j].sin = Math.sin(bullets[j].theta - Math.PI / 2);
+	                    bullets[j].cos = Math.cos(bullets[j].theta - Math.PI / 2);
+	                    break; // Move to next bullet after firing one
+	                }
+	            }
+	        }
+	    }
 	}
-
+	
+	
+	
 	public void addEnemyBullet(Enemy sEnemy) {
 		for (int i = 0; i < numberOfEnemyBullets; i++) {
 			if (!bullets[i].fired) {
@@ -322,7 +424,29 @@ public class GamePanel extends JPanel implements Runnable {
 						hearts[--remainingHearts].setImage();
 					}
 				}
-
+				
+				
+				if (powerup.isAlive
+						&& remainingHearts != 0
+						&& powerup.getBounds().intersects(
+								player.getBounds())) {
+					powerup.isAlive = false;
+					if (powerup_count > 0) {
+						powerup_count -= 1;
+					}
+					addBullet(2);
+				}
+				if (shield.isAlive
+						&& remainingHearts != 0
+						&& shield.getBounds().intersects(
+								player.getBounds())) {
+					shield.isAlive = false;
+					if (shield_count > 0) {
+						shield_count -= 1;
+					}
+					addBullet(3);
+				}
+				
 				for (int i = 0; i < numberOfBullets; i++) {
 					if (bullets[i].fired) {
 						for (int v = 0; v < numberOfEnemies; v++) {
@@ -332,6 +456,7 @@ public class GamePanel extends JPanel implements Runnable {
 									enemy[v].isAlive = false;
 									countEnemy--;
 									bullets[i].fired = false;
+									incrementScore();
 								}
 							}
 						}
@@ -342,6 +467,7 @@ public class GamePanel extends JPanel implements Runnable {
 									stationaryEnemy[v].isAlive = false;
 									countEnemy--;
 									bullets[i].fired = false;
+									incrementScore();
 								}
 							}
 						}
@@ -385,14 +511,31 @@ public class GamePanel extends JPanel implements Runnable {
 						addEnemyBullet(stationaryEnemy[rand]);
 					}
 				}
+				int previousScore = localStorage.loadData("Score");
 
 				if (remainingHearts == 0) {
 					result.won = false;
 					play = false;
 					gameOver = true;
 					resultPanel = true;
+				
+		            
+		            if (currentScore > previousScore) {
+		                localStorage.saveData("Score", currentScore);
+		                System.out.println("New high score saved: " + currentScore);
+		            } else {
+		                System.out.println("No new high score.");
+		            }
 				}
 				if (countEnemy == 0) {
+				
+		            
+		            if (currentScore > previousScore) {
+		                localStorage.saveData("Score", currentScore);
+		                System.out.println("New high score saved: " + currentScore);
+		            } else {
+		                System.out.println("No new high score.");
+		            }
 					result.won = true;
 					play = false;
 					gameOver = true;
@@ -444,12 +587,22 @@ public class GamePanel extends JPanel implements Runnable {
 			if (menuPanel.clicked
 					&& menuPanel.rectangle[4].contains(mouse.pClicked)) {
 				menuPanel.clicked = false;
-				numberOfEnemies = 3;
+				numberOfEnemies = 5;
 				numberOfHearts = 3;
 				remainingHearts = 2;
 				numberOfStationaryEnemies = 1;
+				powerup_count = 1;
+				shield_count = 1;
 				seconds = 90;
 				countEnemy = numberOfEnemies + numberOfStationaryEnemies;
+				//here
+				File background = new File("Resources/background2.jpg");
+				try {
+					backGround = (ImageIO.read(background))
+							.getSubimage(0, 0, 1080, 660);
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
 				reset();
 				mainPanel = false;
 				play = true;
@@ -458,8 +611,10 @@ public class GamePanel extends JPanel implements Runnable {
 			if (menuPanel.clicked
 					&& menuPanel.rectangle[5].contains(mouse.pClicked)) {
 				menuPanel.clicked = false;
-				numberOfEnemies = 4;
+				numberOfEnemies = 6;
 				numberOfHearts = 2;
+				powerup_count = 1;
+				shield_count = 1;
 				remainingHearts = 2;
 				numberOfStationaryEnemies = 2;
 				seconds = 70;
@@ -468,20 +623,36 @@ public class GamePanel extends JPanel implements Runnable {
 				mainPanel = false;
 				play = true;
 				gameOver = false;
+				File background = new File("Resources/background.jpg");
+				try {
+					backGround = (ImageIO.read(background))
+							.getSubimage(0, 0, 1080, 660);
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
 			}
 			if (menuPanel.clicked
 					&& menuPanel.rectangle[6].contains(mouse.pClicked)) {
 				menuPanel.clicked = false;
-				numberOfEnemies = 5;
+				numberOfEnemies = 7;
 				numberOfHearts = 1;
 				remainingHearts = 1;
 				numberOfStationaryEnemies = 3;
+				powerup_count = 1;
+				shield_count = 1;
 				seconds = 60;
 				countEnemy = numberOfEnemies + numberOfStationaryEnemies;
 				reset();
 				mainPanel = false;
 				play = true;
 				gameOver = false;
+				File background = new File("Resources/background1.jpg");
+				try {
+					backGround = (ImageIO.read(background))
+							.getSubimage(0, 0, 1920, 1080);
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
 			}
 			repaint();
 			sleep(60);
@@ -513,13 +684,16 @@ public class GamePanel extends JPanel implements Runnable {
 
 			repaint();
 			sleep(60);
-			result.painted = true;
+			//result.painted = true;
 
 		}
 	}
 
 	public void reset() {
-
+		powerup.setLocation();
+		shield.setLocation();
+		powerup.isAlive = true;
+		shield.isAlive = true;
 		for (int i = 0; i < numberOfHearts; i++) {
 			hearts[i].setHealth();
 		}
@@ -548,7 +722,7 @@ public class GamePanel extends JPanel implements Runnable {
 	public static void backgroundSound() {
         try {
             // Load the audio file
-            File soundFile = new File("Assests/Game1.wav");
+            File soundFile = new File("Resources/Game1.wav");
             AudioInputStream audioStream = AudioSystem.getAudioInputStream(soundFile);
 
             // Get a sound clip resource
@@ -567,6 +741,5 @@ public class GamePanel extends JPanel implements Runnable {
             e.printStackTrace();
         }
 	}
-	
 }
   
